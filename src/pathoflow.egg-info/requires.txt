@@ -1,0 +1,8 @@
+openslide-python
+numpy
+opencv-python-headless
+pydantic
+typer
+torch
+torchvision
+matplotlib

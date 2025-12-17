@@ -1,0 +1,23 @@
+# Ignore Data
+data/
+*.svs
+*.vhdx
+*.tiff
+
+# Ignore Python Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore Virtual Envs (if any)
+.venv/
+venv/
+env/
+
+# Ignore IDE files
+.vscode/
+.idea/
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
