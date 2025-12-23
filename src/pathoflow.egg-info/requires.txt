@@ -6,3 +6,6 @@ typer
 torch
 torchvision
 matplotlib
+pytest
+tqdm
+streamlit

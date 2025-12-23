@@ -1,55 +1,126 @@
 # 🧬 PathoFlow: High-Performance WSI Inference Engine
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge\&logo=python)
-![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge\&logo=docker)
-![PyTorch](https://img.shields.io/badge/PyTorch-ResNet18-EE4C2C?style=for-the-badge\&logo=pytorch)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-
-</div>
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?\&logo=docker\&logoColor=white)](Dockerfile)
 
 ---
 
-## 📖 Overview
+## 📌 Overview
 
-**PathoFlow** is a **production-grade inference pipeline** for **Computational Pathology**, designed to process **Gigapixel Whole Slide Images (WSI)**—often exceeding **100,000 × 100,000 pixels**—*without exhausting system RAM*.
+**PathoFlow** is a **clinical-grade deep learning inference engine** for analyzing **gigapixel Whole Slide Images (WSI)** in digital pathology. It is designed to efficiently process massive histopathology slides, intelligently tile them into manageable patches, and apply a custom-trained **Convolutional Neural Network (CNN)** to detect **tumor regions**.
 
-Unlike conventional image-processing scripts that fail on medical images, PathoFlow uses a **streaming generator architecture**. It detects tissue regions, tiles them on-the-fly, performs deep learning inference using **ResNet-18**, and reconstructs a **diagnostic probability heatmap**.
+Unlike research-only scripts, PathoFlow is **engineered for production**:
+
+* Memory-efficient WSI tiling
+* Artifact and background filtration
+* Modular design separating **model weights ("brain")** from inference logic
+
+---
+
+## 🧠 The AI Model
+
+The core model is a **ResNet18** architecture fine-tuned for **histopathologic lymph node classification**.
+
+* **Dataset:** PatchCamelyon (PCam), derived from the **Camelyon16 Challenge**
+* **Tissue Type:** Sentinel lymph node sections
+* **Objective:** Binary classification of **metastatic tumor tissue** vs **normal tissue** (glass, fat, healthy lymphoid)
 
 ---
 
 ## ✨ Key Features
 
-* 🐋 **Dockerized & Reproducible**
-  Eliminates *dependency hell* (e.g., `libgl1`, `openslide` C-libraries) by packaging the entire runtime into a portable Linux container.
+### 🖼️ Whole Slide Image Support
 
-* ⚡ **Memory Efficient**
-  Streams patches using Python generators (`yield`), enabling **10GB+ WSI processing** with **constant memory usage (<1GB RAM)**.
+* Native support for `.svs`, `.tif`, and `.tiff` formats
+* Powered by **OpenSlide** for efficient slide access
 
-* 🔍 **Smart Tissue Detection**
-  Automatically filters glass/whitespace using **Otsu Thresholding** and **Morphological Operations**.
+### 🧩 Smart & Efficient Tiling
 
-* 🏎️ **Batch Inference**
-  Maximizes GPU/CPU utilization via dynamic batching.
+* Automatic detection and removal of background glass regions
+* Up to **5× faster inference** by skipping non-informative areas
 
-* 🛡️ **Type Safe**
-  Built with **Pydantic** and **Typer** for robust validation and a clean CLI.
+### 🧠 Deep Learning Engine
+
+* **ResNet18 backbone** optimized for metastasis detection
+* Batch-wise inference for memory stability
+
+### 🐳 Portable & Reproducible
+
+* Fully containerized with **Docker**
+* Consistent behavior across machines and operating systems
+
+### 📊 Clinical-Ready Reporting
+
+* Visual **heatmaps** highlighting tumor probability
+* Structured **text reports** suitable for clinical review
 
 ---
 
-## 🚀 Getting Started
+## 🔧 Prerequisites
 
-### Prerequisites
+### Hardware
 
-* **Docker Desktop** (Windows WSL2 / macOS / Linux)
-* ❌ No local Python installation required
+* **RAM:** ≥ 8 GB (16 GB+ recommended for large WSIs)
+* **CPU:** Multi-core processor (Intel i5/i7 or AMD Ryzen 5+)
+* **Storage:** SSD strongly recommended for fast slide I/O
+
+### Software
+
+* **Docker Desktop** (recommended for isolation)
+* **Python 3.11+** (for local execution)
+* **Git** (to clone the repository)
 
 ---
 
-### 1️⃣ Build the Engine
+## 📂 Project Structure
 
-Compile the Docker container. This installs OS dependencies, PyTorch, and the PathoFlow engine.
+```text
+pathoflow/
+├── data/                          # Local data (slides & models)
+│   ├── CMU-1.svs                  # Example WSI
+│   └── pathoflow_resnet18_pro.pth # Model weights
+├── experiments/                   # Research & training (not in Docker)
+│   └── training_engine.py
+├── outputs/                       # Generated results
+├── src/                           # Production source code
+│   └── pathoflow/
+│       ├── __init__.py
+│       ├── cli.py                 # Main entry point
+│       ├── core/                  # WSI processing
+│       │   ├── mask.py
+│       │   ├── tiler.py
+│       │   └── wsi.py
+│       ├── engine/                # AI inference
+│       │   ├── cnn.py
+│       │   └── heatmap.py
+│       └── utils/                 # Utilities
+│           └── batching.py
+├── tests/                         # Unit tests
+├── .dockerignore
+├── Dockerfile
+├── LICENSE
+├── NOTICES.md                     # Third-party attributions
+├── pyproject.toml                 # Python dependencies
+└── README.md
+```
+
+---
+
+## 📥 Installation Guide
+
+### 1️⃣ Clone the Repository
+
+```bash
+git clone https://github.com/erfanhoseingholizadeh/pathoflow.git
+cd pathoflow
+```
+
+---
+
+### 2️⃣ Option A: Docker (Recommended)
+
+Docker guarantees reproducibility by isolating all dependencies.
 
 ```bash
 docker build -t pathoflow:latest .
@@ -57,94 +128,83 @@ docker build -t pathoflow:latest .
 
 ---
 
-### 2️⃣ Run Inference
-
-PathoFlow runs inside a sealed container. To process your files, use **Docker volume mapping** (`-v`).
+### 2️⃣ Option B: Local Installation
 
 ```bash
-docker run --rm \
-  -v $(pwd)/data:/data \
-  pathoflow:latest \
-  /data/YOUR_SLIDE.svs \
-  --output /data/heatmap.png \
-  --verbose
+# Install system dependency (Linux / WSL)
+sudo apt-get update && sudo apt-get install -y openslide-tools
+
+# Install Python package
+pip install --upgrade pip
+pip install -e .
 ```
-
-#### Command Breakdown
-
-* `-v $(pwd)/data:/data` → Mounts local `./data` into the container
-* `/data/YOUR_SLIDE.svs` → Input slide (container-visible path)
-* `--output` → Output heatmap location
-* `--verbose` → Detailed progress logs
 
 ---
 
-## 🐞 Debugging & Development
+## 🚀 Usage
 
-To validate tissue detection and tiling **without running full inference**, use the built-in debug tool.
+Ensure your `.svs` slide and `.pth` model weights are placed in the `data/` directory.
+
+### ▶️ Run with Docker (Universal)
+
+> 💡 The `--smart` flag is highly recommended to skip empty glass regions.
 
 ```bash
-# Runs debug_wsi.py inside the container
-docker run --rm \
-  -v $(pwd)/data:/data \
-  --entrypoint python \
-  pathoflow:latest debug_wsi.py
+docker run -it --rm \
+  -v "$(pwd)/data:/data" \
+  -v "$(pwd)/data:/models" \
+  -v "$(pwd)/outputs:/app/outputs" \
+  pathoflow:latest /data/Your_Slide.svs --smart --verbose
 ```
-
-This extracts **5 sample patches** to `data/patches/` for visual sanity checks.
 
 ---
 
-## 🏗️ Project Architecture
+### ▶️ Run Locally (Python)
 
-The codebase follows a **Ports and Adapters** style architecture, ensuring clean separation between core logic, CLI, and runtime.
+```bash
+python -m pathoflow.cli "data/Your_Slide.svs" \
+  --model-path "data/pathoflow_resnet18_pro.pth" \
+  --smart --verbose
+```
+
+---
+
+## 📊 Output & Reports
+
+All results are saved to the `outputs/` directory.
+
+### Generated Files
+
+* **Heatmap (`.png`)**
+  Color-coded overlay where **red = high tumor probability** and **blue = normal tissue**.
+
+* **Report (`.txt`)**
+  Structured diagnostic summary:
 
 ```text
-.
-├── README.md              # Documentation & usage guide
-├── LICENSE                # MIT license
-├── Dockerfile             # Container blueprint
-├── .dockerignore          # Docker exclusions
-├── pyproject.toml         # Dependencies & metadata
-├── debug_wsi.py           # [DEV] Visual sanity checker
-├── src
-│   └── pathoflow
-│       ├── cli.py         # Typer CLI entry point
-│       ├── core
-│       │   ├── mask.py    # Tissue detection (CV2/Otsu)
-│       │   ├── tiler.py   # Streaming grid generator
-│       │   └── wsi.py     # OpenSlide wrapper
-│       ├── engine
-│       │   ├── cnn.py     # ResNet model wrapper
-│       │   ├── heatmap.py # Heatmap stitching
-│       │   └── interface.py # Model abstraction
-│       └── utils
-│           └── batching.py # Lazy batch generator
-└── tests
-    ├── conftest.py        # Pytest fixtures (mock OpenSlide)
-    └── test_core.py       # Unit tests
+--- PATHOLOGY AI REPORT ---
+Slide:        CMU-1.svs
+Date:         2025-12-23 14:00:00
+Duration:     45.2 seconds
+Threshold:    0.500
+
+--- DIAGNOSIS ---
+Total Tissues Scanned: 1540
+Tumor Regions Found:   320
+Tumor Burden:          20.78%
 ```
 
 ---
 
-## ⚠️ Model Status & Disclaimer
+## ⚖️ License & Acknowledgments
 
-**Current State**
-The repository includes a **ResNet-18 backbone with an untrained classification head**.
+### 🧾 License
 
-The generated heatmaps demonstrate **pipeline correctness** (tiling, batching, stitching), *not clinical accuracy*.
+This project is licensed under the **MIT License** — free to use and modify.
 
-To use a trained model, load weights via:
+### 📚 Third-Party Components
 
-```python
-model.load_state_dict(...)
-```
+* **Dataset:** PatchCamelyon (PCam) / Camelyon16 (CC0)
+* **Libraries:** OpenSlide (LGPL), PyTorch (BSD)
 
-> **Disclaimer**
-> This software is provided *"as is"* for **research and educational purposes only**. It is **not a medical device** and must not be used for clinical diagnosis or patient care. The authors assume no liability for decisions made using this software.
-
----
-
-## 📜 License
-
-Distributed under the **MIT License**. See `LICENSE` for details.
+See `NOTICES.md` for full legal and attribution details.

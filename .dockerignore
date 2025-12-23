@@ -1,0 +1,21 @@
+# --- IGNORE HEAVY DATA ---
+data/*
+outputs/*
+experiments/*
+*.svs
+*.tif
+*.vhdx
+
+# --- IGNORE GIT & CACHE ---
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+venv
+env
+
+# --- IGNORE IDE CONFIGS ---
+.vscode
+.idea
+.DS_Store

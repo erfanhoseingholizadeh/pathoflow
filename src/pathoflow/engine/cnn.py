@@ -1,62 +1,92 @@
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
+from PIL import Image
 import numpy as np
-from typing import List
-from .interface import ModelInterface
-import logging
-
-logger = logging.getLogger("pathoflow.engine.cnn")
+from pathoflow.engine.interface import ModelInterface
+from pathlib import Path
 
 class ResNetClassifier(ModelInterface):
-    def __init__(self, device: str = "cpu"):
+    def __init__(self, model_path: Path = None, device: str = "cpu"):
         self.device = torch.device(device)
-        self.model = None
+        self.threshold = 0.5  # Default fallback
+        
+        # Define standard ImageNet normalization
         self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize(224), # ResNet expects 224x224
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-
-    def load(self, weights_path: str = None):
-        logger.info(f"Loading ResNet18 on {self.device}...")
-        # We load a pre-trained ResNet18
-        # weights='DEFAULT' downloads the ImageNet weights automatically
-        self.model = models.resnet18(weights='DEFAULT')
         
-        # We are doing Feature Extraction (or binary classification)
-        # Let's assume a binary problem: Tumor (1) vs Normal (0)
-        num_ftrs = self.model.fc.in_features
-        self.model.fc = nn.Linear(num_ftrs, 2)
-        
-        self.model.to(self.device)
-        self.model.eval() # Set to evaluation mode (freezes Batch Norm / Dropout)
-        logger.info("Model loaded successfully.")
+        # Call the mandatory load method immediately
+        self.model = self.load(model_path)
+        self.model.eval()
 
-    def preprocess(self, image: np.ndarray) -> torch.Tensor:
-        """Converts Numpy (H, W, 3) -> Tensor (3, 224, 224)."""
+    def load(self, model_path: Path):
+        """
+        Loads the model and applies 'torch.compile' optimization.
+        """
+        # 1. Define Architecture
+        model = models.resnet18(weights=None) 
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 1) # Binary Head
+        model = model.to(self.device)
+
+        # 2. Load Weights & Metadata
+        if model_path and Path(model_path).exists():
+            print(f"   [AI] 🧠 Loading Brain from: {model_path}")
+            try:
+                checkpoint = torch.load(model_path, map_location=self.device)
+                
+                # --- Handle Production File ---
+                if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+                    # It's the new Production file!
+                    model.load_state_dict(checkpoint["model_state_dict"])
+                    self.threshold = checkpoint.get("threshold", 0.5)
+                    acc = checkpoint.get("accuracy", 0.0)
+                    print(f"   [AI] ✅ Production Mode. Threshold: {self.threshold} | Accuracy: {acc:.2%}")
+                else:
+                    # It's a standard .pth file (Old)
+                    model.load_state_dict(checkpoint)
+                    print("   [AI] ✅ Standard Weights loaded.")
+
+            except Exception as e:
+                print(f"   [AI] ❌ Error loading weights: {e}")
+                print("   [AI] ⚠️ Falling back to Random Weights.")
+        else:
+            print("   [AI] ⚠️ No model path found. Using Random Weights.")
+
+        # --- SMART COMPILATION ---
+        # ONLY compile if we are on a GPU (CUDA) to avoid CPU/WSL warnings.
+        if self.device.type == 'cuda' and hasattr(torch, "compile"):
+            print("   [AI] 🚀 GPU Detected: Compiling model with mode='max-autotune'...")
+            try:
+                model = torch.compile(model, mode="max-autotune")
+            except Exception as e:
+                print(f"   [AI] ⚠️ Compilation failed (running standard mode): {e}")
+        else:
+            print("   [AI] ℹ️  Standard Inference Mode (Compilation skipped for stability)")
+
+        return model
+
+    def preprocess(self, image: Image.Image):
+        """
+        Mandatory implementation of the preprocess method.
+        """
         return self.transform(image)
 
-    def predict_batch(self, images: List[np.ndarray]) -> np.ndarray:
-        """
-        Runs inference on a batch of images.
-        """
-        if not self.model:
-            raise RuntimeError("Model not loaded. Call load() first.")
-
-        # 1. Preprocess all images in the batch
-        batch_tensors = [self.preprocess(img) for img in images]
-        
-        # 2. Stack into a single tensor: (Batch, 3, 224, 224)
-        batch_input = torch.stack(batch_tensors).to(self.device)
-
-        # 3. Inference (No Gradient calculation = Faster & Less RAM)
-        with torch.no_grad():
-            outputs = self.model(batch_input)
+    def predict_batch(self, patches: list[Image.Image]) -> np.ndarray:
+        if not patches:
+            return np.array([])
             
-            # Apply Softmax to get probabilities (0 to 1)
-            probabilities = torch.nn.functional.softmax(outputs, dim=1)
+        # Use the mandatory preprocess method
+        tensors = [self.preprocess(p) for p in patches]
+        batch_tensor = torch.stack(tensors).to(self.device)
+
+        # --- INFERENCE MODE ---
+        # 'inference_mode' is faster and uses less memory than 'no_grad'
+        with torch.inference_mode():
+            logits = self.model(batch_tensor)
+            probs = torch.sigmoid(logits)
             
-        # 4. Return as numpy array (move to CPU first)
-        return probabilities.cpu().numpy()
+        return probs.cpu().numpy().flatten()
