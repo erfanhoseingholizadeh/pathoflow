@@ -102,7 +102,7 @@ pathoflow/
 ├── NOTICES.md                     # Third-party attributions
 ├── pyproject.toml                 # Python dependencies
 ├── README.md
-└──technical_report.md
+└── technical_report.md
 ```
 
 ---
