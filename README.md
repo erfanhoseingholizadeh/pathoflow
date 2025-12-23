@@ -78,7 +78,6 @@ The core model is a **ResNet18** architecture fine-tuned for **histopathologic l
 ```text
 pathoflow/
 ├── data/                          # Local data (slides & models)
-│   ├── CMU-1.svs                  # Example WSI
 │   └── pathoflow_resnet18_pro.pth # Model weights
 ├── experiments/                   # Research & training (not in Docker)
 │   └── training_engine.py
@@ -102,7 +101,8 @@ pathoflow/
 ├── LICENSE
 ├── NOTICES.md                     # Third-party attributions
 ├── pyproject.toml                 # Python dependencies
-└── README.md
+├── README.md
+└──technical_report.md
 ```
 
 ---
