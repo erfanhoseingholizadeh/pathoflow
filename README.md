@@ -95,7 +95,6 @@ pathoflow/
 │       │   └── heatmap.py
 │       └── utils/                 # Utilities
 │           └── batching.py
-├── tests/                         # Unit tests
 ├── .dockerignore
 ├── Dockerfile
 ├── LICENSE
