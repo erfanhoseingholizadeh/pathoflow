@@ -94,7 +94,8 @@ pathoflow/
 │       │   ├── cnn.py
 │       │   └── heatmap.py
 │       └── utils/                 # Utilities
-│           └── batching.py
+│           ├── batching.py
+│           └── logger.py
 ├── .dockerignore
 ├── Dockerfile
 ├── LICENSE
