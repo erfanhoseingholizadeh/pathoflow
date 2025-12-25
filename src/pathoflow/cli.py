@@ -8,6 +8,7 @@ from pathoflow.core.tiler import get_tissue_coordinates
 from pathoflow.engine.heatmap import HeatmapGenerator
 from pathoflow.engine.cnn import ResNetClassifier
 from pathoflow.utils.batching import batch_generator
+from pathoflow.utils.logger import setup_logger  # <--- NEW IMPORT
 
 # Disable completion for cleaner help output
 app = typer.Typer(add_completion=False)
@@ -67,33 +68,33 @@ def analyze(
     PathoFlow Engine: Runs Deep Learning inference on Gigapixel Whole Slide Images (WSI).
     """
     
-    # 1. Validation
+    # 1. Setup Logger
+    # This replaces 'if verbose: print...' checks with a system-wide setting
+    logger = setup_logger("PathoFlow", verbose=True) # Always verbose in logs, terminal depends on handlers
+
+    # 2. Validation
     if not slide_path.exists():
-        typer.secho(f"❌ Error: Slide file not found at: {slide_path}", fg=typer.colors.RED, err=True)
+        logger.error(f"Slide file not found at: {slide_path}")
         raise typer.Exit(code=1)
 
     # Fallback: Check local path if container path doesn't exist
     if not model_path.exists():
-        # Check if user has it in local data folder relative to execution
         local_fallback = Path("data") / model_path.name
         if local_fallback.exists():
             model_path = local_fallback
         else:
-            typer.secho(f"❌ Model weights not found at {model_path} or {local_fallback}", fg=typer.colors.RED)
-            typer.secho("   (Hint: Did you mount the volume? -v $(pwd)/data:/models)", fg=typer.colors.YELLOW)
+            logger.error(f"Model weights not found at {model_path} or {local_fallback}")
+            logger.warning("(Hint: Did you mount the volume? -v $(pwd)/data:/models)")
             raise typer.Exit(1)
 
     # Auto-Naming
     if output.name == "heatmap.png":
         output = get_auto_filename(slide_path, limit)
 
-    # 2. Initialization
+    # 3. Initialization
     start_time = time.time()
-    
-    if verbose:
-        typer.secho(f"🚀 Initializing PathoFlow...", fg=typer.colors.BLUE)
-        typer.echo(f"   • Slide: {slide_path.name}")
-        typer.echo(f"   • Saving to: {output}")
+    logger.info(f"Initializing Engine for slide: {slide_path.name}")
+    logger.info(f"Output target: {output}")
 
     try:
         # Load Model
@@ -102,28 +103,29 @@ def analyze(
         mask_gen = OtsuTissueMask()
         heatmap_gen = HeatmapGenerator()
 
-        # 3. Processing
-        if verbose: typer.echo("   • Step 1: Detecting tissue regions...")
+        # 4. Processing
+        logger.info("Step 1: Detecting tissue regions (Smart Tiling)...")
         slide_image = wsi.get_thumbnail()
         mask = mask_gen.generate_mask(slide_image)
         
         dims = wsi.get_dimensions()
         coords = get_tissue_coordinates(mask, dims, patch_size=patch_size, filter_background=smart)
         
-        if limit: coords = coords[:limit]
+        if limit: 
+            logger.warning(f"Limiting scan to first {limit} patches for testing.")
+            coords = coords[:limit]
         
-        # 4. Inference
+        # 5. Inference
         results = []
         tumor_count = 0 
         
-        # Print info ONCE before the bar starts
-        print(f"   Active Threshold: {cnn.threshold}")
+        logger.info(f"Step 2: Starting Inference (Threshold: {cnn.threshold})")
         
         for batch_coords in tqdm(batch_generator(coords, batch_size), 
                                  total=len(coords)//batch_size, 
                                  desc="Analyzing", 
                                  unit="batch",
-                                 ncols=80): # Force width to 80 chars to prevent wrapping
+                                 ncols=80): 
                                  
             patches = wsi.read_patches(batch_coords, patch_size)
             probs = cnn.predict_batch(patches)
@@ -133,20 +135,22 @@ def analyze(
                 if prob > cnn.threshold: 
                     tumor_count += 1 
 
-        # 5. Save Results
-        if verbose: typer.echo("\n   • Step 3: Saving results...")
+        # 6. Save Results
+        logger.info("Step 3: Generating Heatmap and Report...")
         heatmap_gen.save_heatmap(results, wsi.get_dimensions(), patch_size, output)
         
         # Generate Text Report
         elapsed = time.time() - start_time
         report_path = save_report(output, slide_path.name, elapsed, len(results), tumor_count, cnn.threshold)
 
-        typer.secho(f"\n✅ Analysis Complete.", fg=typer.colors.GREEN, bold=True)
-        typer.echo(f"   • Heatmap: {output}")
-        typer.echo(f"   • Report:  {report_path}")
+        # Final Success Log
+        logger.info(f"Analysis Complete. Duration: {elapsed:.1f}s")
+        logger.info(f"Heatmap saved: {output}")
+        logger.info(f"Report saved:  {report_path}")
 
     except Exception as e:
-        typer.secho(f"\n❌ Critical Error: {e}", fg=typer.colors.RED, err=True)
+        # This catches ANY crash and writes it to the log file with a timestamp
+        logger.error(f"Critical System Error: {e}")
         raise typer.Exit(code=1)
 
 if __name__ == "__main__":
