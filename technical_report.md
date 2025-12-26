@@ -20,7 +20,7 @@ The system follows a modular **Producer-Consumer** design pattern to handle memo
 ### 2.1. The Orchestrator (`cli.py`)
 The Command Line Interface (CLI) functions as the central controller, implementing **Dependency Injection** to manage component lifecycles.
 * **Role:** It instantiates the WSI loader, mask generator, and neural network classifier at runtime.
-* **Process Flow:** The CLI manages a synchronous loop that fetches coordinate batches from the `tiler` (Producer) and feeds them to the `CNN` (Consumer), aggregating results in real-time. This ensures a constant memory footprint ($O(1)$) regardless of input slide dimensions.
+* **Process Flow:** The CLI manages a synchronous loop that fetches coordinate batches from the `tiler` (Producer) and feeds them to the `CNN` (Consumer), aggregating results in real-time. This ensures a constant memory footprint (O(1)) regardless of input slide dimensions.
 
 ### 2.2. Containerization (Docker)
 To guarantee environmental consistency, the application is deployed as a stateless Docker container.
